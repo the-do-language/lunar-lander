@@ -55,3 +55,21 @@ rest.get("/hello/:name", function(req)
   return 200, { message = "hello " .. req.params.name }, { ["x-powered-by"] = "lua" }
 end)
 ```
+
+### `sugardb.get(key)`
+### `sugardb.set(key, value)`
+### `sugardb.delete(key)`
+### `sugardb.keys()`
+
+SugarDB is an in-memory key/value store exposed to Lua handlers.
+
+```lua
+sugardb.set("message", "hello")
+
+rest.get("/db", function(_)
+  return 200, {
+    message = sugardb.get("message"),
+    keys = sugardb.keys(),
+  }, {}
+end)
+```

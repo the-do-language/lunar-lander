@@ -1,9 +1,7 @@
-package main
+package server
 
 import (
 	"errors"
-	"flag"
-	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -13,50 +11,33 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/yuin/gopher-lua"
+
+	"lunar-lander/internal/sugardb"
 )
 
-type luaEngine struct {
+type LuaEngine struct {
 	L     *lua.LState
 	mu    sync.Mutex
 	route *gin.Engine
 	refs  []*lua.LFunction
 }
 
-func main() {
-	var scriptPath string
-	var addr string
-	flag.StringVar(&scriptPath, "script", "app.lua", "path to Lua script")
-	flag.StringVar(&addr, "addr", ":8080", "address to listen on")
-	flag.Parse()
-
-	engine := gin.New()
-	engine.Use(gin.Recovery())
-
-	luaEngine, err := newLuaEngine(engine, scriptPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to start: %v\n", err)
-		os.Exit(1)
-	}
-
-	if err := luaEngine.loadScript(scriptPath); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to load script: %v\n", err)
-		os.Exit(1)
-	}
-
-	if err := engine.Run(addr); err != nil {
-		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
-		os.Exit(1)
-	}
-}
-
-func newLuaEngine(router *gin.Engine, scriptPath string) (*luaEngine, error) {
+func NewLuaEngine(router *gin.Engine, store *sugardb.Store) *LuaEngine {
 	L := lua.NewState()
-	engine := &luaEngine{L: L, route: router}
+	engine := &LuaEngine{L: L, route: router}
 	registerRestModule(L, engine)
-	return engine, nil
+	registerSugarDBModule(L, store)
+	return engine
 }
 
-func (e *luaEngine) loadScript(path string) error {
+func (e *LuaEngine) Close() {
+	if e == nil || e.L == nil {
+		return
+	}
+	e.L.Close()
+}
+
+func (e *LuaEngine) LoadScript(path string) error {
 	if path == "" {
 		return errors.New("script path is required")
 	}
@@ -66,7 +47,7 @@ func (e *luaEngine) loadScript(path string) error {
 	return e.L.DoFile(path)
 }
 
-func registerRestModule(L *lua.LState, engine *luaEngine) {
+func registerRestModule(L *lua.LState, engine *LuaEngine) {
 	mod := L.SetFuncs(L.NewTable(), map[string]lua.LGFunction{
 		"get":    engine.registerRoute(http.MethodGet),
 		"post":   engine.registerRoute(http.MethodPost),
@@ -78,7 +59,7 @@ func registerRestModule(L *lua.LState, engine *luaEngine) {
 	L.SetGlobal("rest", mod)
 }
 
-func (e *luaEngine) registerAnyRoute(L *lua.LState) int {
+func (e *LuaEngine) registerAnyRoute(L *lua.LState) int {
 	path := L.CheckString(1)
 	handler := L.CheckFunction(2)
 	methods := []string{
@@ -94,7 +75,7 @@ func (e *luaEngine) registerAnyRoute(L *lua.LState) int {
 	return 0
 }
 
-func (e *luaEngine) registerRoute(method string) lua.LGFunction {
+func (e *LuaEngine) registerRoute(method string) lua.LGFunction {
 	return func(L *lua.LState) int {
 		path := L.CheckString(1)
 		handler := L.CheckFunction(2)
@@ -103,7 +84,7 @@ func (e *luaEngine) registerRoute(method string) lua.LGFunction {
 	}
 }
 
-func (e *luaEngine) attachRoute(method, path string, handler *lua.LFunction) {
+func (e *LuaEngine) attachRoute(method, path string, handler *lua.LFunction) {
 	e.refs = append(e.refs, handler)
 	e.route.Handle(method, path, func(c *gin.Context) {
 		e.mu.Lock()
