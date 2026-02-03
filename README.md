@@ -1,6 +1,6 @@
 # Lunar Lander Lua REST Engine
 
-This project provides a small REST engine built with Gin and GopherLua. Routes are registered from a Lua script using a simple API inspired by Milua's REST approach, but with a lightweight Go server.
+This project provides a small REST engine built with Gin and GopherLua. Routes are registered from a Lua script using a simple API inspired by Milua's REST approach, but with a lightweight Gin server.
 
 ## Quick start
 

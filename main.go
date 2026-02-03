@@ -19,6 +19,7 @@ type luaEngine struct {
 	L     *lua.LState
 	mu    sync.Mutex
 	route *gin.Engine
+	refs  []*lua.LFunction
 }
 
 func main() {
@@ -103,16 +104,10 @@ func (e *luaEngine) registerRoute(method string) lua.LGFunction {
 }
 
 func (e *luaEngine) attachRoute(method, path string, handler *lua.LFunction) {
-	ref := e.L.Ref(lua.LRegistryIndex, handler)
+	e.refs = append(e.refs, handler)
 	e.route.Handle(method, path, func(c *gin.Context) {
 		e.mu.Lock()
 		defer e.mu.Unlock()
-
-		fn := e.L.GetRef(ref)
-		if fn == lua.LNil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "handler not found"})
-			return
-		}
 
 		reqTable, err := requestToLuaTable(e.L, c)
 		if err != nil {
@@ -120,7 +115,7 @@ func (e *luaEngine) attachRoute(method, path string, handler *lua.LFunction) {
 			return
 		}
 
-		if err := e.L.CallByParam(lua.P{Fn: fn, NRet: 3, Protect: true}, reqTable); err != nil {
+		if err := e.L.CallByParam(lua.P{Fn: handler, NRet: 3, Protect: true}, reqTable); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -222,7 +217,7 @@ func parseLuaResponse(L *lua.LState) (int, any, map[string]string) {
 		body = bool(v)
 	case lua.LNumber:
 		body = float64(v)
-	case lua.LNilType:
+	case *lua.LNilType:
 		body = nil
 	default:
 		body = v.String()
