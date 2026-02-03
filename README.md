@@ -18,6 +18,34 @@ LUA
 go run . -script app.lua -addr :8080
 ```
 
+## Database (SugarDB)
+
+The engine initializes a lightweight SugarDB store on startup. By default it persists to `sugardb.json` in the working directory. You can configure the location (or disable persistence) with the `-db` flag:
+
+```bash
+go run . -script app.lua -addr :8080 -db ./data/sugardb.json
+# Or keep everything in memory:
+go run . -script app.lua -addr :8080 -db ""
+```
+
+### Lua API
+
+SugarDB is exposed to Lua as the `db` module:
+
+```lua
+-- Insert a record
+local user = db.insert("users", { name = "Ada", role = "pilot" })
+
+-- Query by exact match
+local pilots = db.query("users", { role = "pilot" })
+
+-- Update matching records (returns count)
+local updated = db.update("users", { name = "Ada" }, { role = "commander" })
+
+-- Delete matching records (returns count)
+local deleted = db.delete("users", { role = "commander" })
+```
+
 ## Lua API
 
 ### `rest.get(path, handler)`
